@@ -1,1 +1,1 @@
-from .interface_rslinx import InterfaceRSLinx
+from .interface_rslinx import InterfaceRsLinx
