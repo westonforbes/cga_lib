@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="cga-lib",
+    name="cga_lib",
     version="0.1.0",
     author="Weston Forbes",
     description="This is a package of tools used by myself, Weston Forbes, for the CG Automation Toolkit.",
