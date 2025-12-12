@@ -35,3 +35,10 @@ To set up the interpreter for the editor in VS Code.
 \.venv\\Scripts\\python.exe (Windows)
 /.venv/bin/python (Linux)
 ```
+
+### Cleanup Requirements.txt
+
+```
+pip install pipreqs
+pipreqs --force
+```
