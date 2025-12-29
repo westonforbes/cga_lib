@@ -198,6 +198,44 @@ class InterfaceRsLinx:
         return successful, failed
 
     @staticmethod
+    def _process_udt_fields(tag_name: str, udt, plc_ip: str, plc, tag_info: dict) -> None:
+        """
+        #### Description:
+        Recursively process UDT fields, handling nested UDTs.
+        
+        #### Args:
+            tag_name (str): The full tag name path (e.g., "ParentTag.ChildField").
+            udt: The UDT object from pylogix.
+            plc_ip (str): IP address of the PLC.
+            plc: The PLC connection object.
+            tag_info (dict): The dictionary to populate with tag information.
+        """
+        
+        # For each field in the UDT (except the first one which is the UDT itself)...
+        for field in udt.Fields[1:]:
+            full_field_name = f"{tag_name}.{field.TagName}"
+            
+            # Check if the field is a standard datatype.
+            if any(field.DataType == value[1] for value in plc.CIPTypes.values()):
+                
+                # Add the field as a standard tag.
+                tag_info[full_field_name] = {
+                    "ip_address": plc_ip,
+                    "data_type": field.DataType,
+                    "value": None,
+                    "timestamp_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"),
+                    "timestamp_local": datetime.now().astimezone().strftime("%Y-%m-%dT%H:%M:%S")
+                }
+            
+            # Check if the field is itself a UDT (handle nested UDTs).
+            else:
+                for udt_name, nested_udt in plc.UDTByName.items():
+                    if field.DataType == udt_name:
+                        # Recursively process the nested UDT.
+                        InterfaceRsLinx._process_udt_fields(full_field_name, nested_udt, plc_ip, plc, tag_info)
+                        break
+
+    @staticmethod
     def get_all_available_tags(plc_ip: str) -> dict:
         """
         #### Description:
@@ -250,17 +288,9 @@ class InterfaceRsLinx:
                             for udt_name, udt in plc.UDTByName.items():
                                 if tag.DataType == udt_name:
                                     
-                                    # Create a dictionary to hold UDT fields.
-                                    udt_fields = {}
-
-                                    # For each field in the UDT (except the first one which is the UDT itself)...
-                                    for field in udt.Fields[1:]:
-                                        tag_info[f"{tag.TagName}.{field.TagName}"] = {"ip_address": plc_ip, 
-                                                            "data_type": tag.DataType,
-                                                            "udt_fields": udt_fields,
-                                                            "value": None,
-                                                            "timestamp_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"),
-                                                            "timestamp_local": datetime.now().astimezone().strftime("%Y-%m-%dT%H:%M:%S")}
+                                    # Recursively process UDT fields (handles nested UDTs).
+                                    InterfaceRsLinx._process_udt_fields(tag.TagName, udt, plc_ip, plc, tag_info)
+                                    break
 
                 
                 # Return the tag info dictionary.
@@ -283,3 +313,5 @@ if __name__ == "__main__":
     
     import json
     print(json.dumps(data, indent=4))
+
+    InterfaceRsLinx.write_tags("191.191.191.9", {"Program:MainProgram.demo_tag_UDT_with_nests.demo_nested_UDT_2.demo_UDT_member_STRING": "booger"})
