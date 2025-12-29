@@ -20,3 +20,27 @@ class DataProcessors:
             return data_dict
         except Exception as e:
             raise Exception(f"error reading JSON file at '{file_path}': {e}")
+        
+    @staticmethod
+    def tag_dict_to_comma_delimited_string(tag_dict: dict) -> str:
+        """
+        #### Description:
+        Convert a dictionary of tags to a comma-delimited string with Excel-compatible newlines.
+        
+        #### Args:
+            tag_dict (dict): Dictionary of tags.
+        
+        #### Returns:
+            str: Comma-delimited string of tags with newlines.
+        """
+        try:
+            tag_string = ''
+            for tag, tag_value in tag_dict.items():
+                tag_string += tag_value["ip_address"] + '\t'
+                tag_string += tag + '\t'
+                tag_string += str(tag_value["value"]) + '\t'
+                tag_string += str(tag_value["data_type"]) + '\r\n'
+
+            return tag_string
+        except Exception as e:
+            raise Exception(f"error converting tag dictionary to string: {e}")
