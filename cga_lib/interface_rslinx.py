@@ -236,7 +236,7 @@ class InterfaceRsLinx:
                         break
 
     @staticmethod
-    def get_all_available_tags(plc_ip: str) -> dict:
+    def _get_all_available_tags(plc_ip: str) -> dict:
         """
         #### Description:
         Get a dictionary of all available tags from the PLC.
@@ -302,16 +302,22 @@ class InterfaceRsLinx:
                 # Raise an exception.
                 raise Exception(tags.Status)
 
-
-if __name__ == "__main__":
-    data = InterfaceRsLinx.get_all_available_tags("191.191.191.9")
-    list_of_tags = list(data.keys())
-    read_data = InterfaceRsLinx.read_tags("191.191.191.9", list_of_tags)
-    for tag in data.keys():
-        if tag in read_data:
-            data[tag]["value"] = read_data[tag]
-    
-    import json
-    print(json.dumps(data, indent=4))
-
-    InterfaceRsLinx.write_tags("191.191.191.9", {"Program:MainProgram.demo_tag_UDT_with_nests.demo_nested_UDT_2.demo_UDT_member_STRING": "booger"})
+    @staticmethod
+    def get_all_available_tags(plc_ip: str) -> dict:
+        """
+        #### Description:
+        Public method to get all available tags (and their values) from the PLC.
+        
+        #### Args:
+            plc_ip (str): IP address of the PLC.
+        
+        #### Returns:
+            dict: Dictionary with tag names as keys and data types as values, else raises Exception on failure.
+        """
+        data = InterfaceRsLinx._get_all_available_tags(plc_ip)
+        list_of_tags = list(data.keys())
+        read_data = InterfaceRsLinx.read_tags(plc_ip, list_of_tags)
+        for tag in data.keys():
+            if tag in read_data:
+                data[tag]["value"] = read_data[tag]
+        return data
