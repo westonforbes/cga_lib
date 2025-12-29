@@ -90,7 +90,7 @@ class InterfaceRsLinx:
             else: raise Exception(f"device at ip '{ip}' is not a plc.")
 
     @staticmethod
-    def read_tags(plc_ip: str, tag_list: list[str], verbose: bool = False) -> dict:
+    def read_tags(plc_ip: str, tag_list: list[str], verbose: bool = False, callback=None) -> dict:
         """
         #### Description:
         Read tags from the PLC.
@@ -99,6 +99,7 @@ class InterfaceRsLinx:
             plc_ip (str): IP address of the PLC.
             tag_list (list): List of tag names to read.
             verbose (bool): Whether to print verbose output.
+            callback: Optional callback function to receive verbose messages.
         
         #### Returns:
             Dictionary with tag names as keys and values.
@@ -123,7 +124,9 @@ class InterfaceRsLinx:
 
                     # Read the tag with timeout of 3 seconds.
                     with concurrent.futures.ThreadPoolExecutor() as executor:
-                        if verbose: print(f"reading value of tag: '{tag}'")
+                        msg = f"reading value of tag: '{tag}'"
+                        if verbose: print(msg)
+                        if callback: callback(msg)
                         future = executor.submit(plc.Read, tag)
                         try:
                             result = future.result(timeout=2)
@@ -200,7 +203,7 @@ class InterfaceRsLinx:
         return successful, failed
 
     @staticmethod
-    def _process_udt_fields(tag_name: str, udt, plc_ip: str, plc, tag_info: dict, verbose: bool = False) -> None:
+    def _process_udt_fields(tag_name: str, udt, plc_ip: str, plc, tag_info: dict, verbose: bool = False, callback=None) -> None:
         """
         #### Description:
         Recursively process UDT fields, handling nested UDTs.
@@ -212,6 +215,7 @@ class InterfaceRsLinx:
             plc: The PLC connection object.
             tag_info (dict): The dictionary to populate with tag information.
             verbose (bool): Whether to print verbose output.
+            callback: Optional callback function to receive verbose messages.
         """
         
         # For each field in the UDT (except the first one which is the UDT itself)...
@@ -221,7 +225,9 @@ class InterfaceRsLinx:
             # Check if the field is a standard datatype.
             if any(field.DataType == value[1] for value in plc.CIPTypes.values()) and not full_field_name.__contains__("ZZZZZZZZZZ"):
                 
-                if verbose: print(f"processing tag: '{full_field_name}'")
+                msg = f"processing tag: '{full_field_name}'"
+                if verbose: print(msg)
+                if callback: callback(msg)
                 # Add the field as a standard tag.
                 tag_info[full_field_name] = {
                     "ip_address": plc_ip,
@@ -234,11 +240,11 @@ class InterfaceRsLinx:
                 for udt_name, nested_udt in plc.UDTByName.items():
                     if field.DataType == udt_name:
                         # Recursively process the nested UDT.
-                        InterfaceRsLinx._process_udt_fields(full_field_name, nested_udt, plc_ip, plc, tag_info, verbose)
+                        InterfaceRsLinx._process_udt_fields(full_field_name, nested_udt, plc_ip, plc, tag_info, verbose, callback)
                         break
             
     @staticmethod
-    def _get_all_available_tags(plc_ip: str, verbose: bool = False) -> dict:
+    def _get_all_available_tags(plc_ip: str, verbose: bool = False, callback=None) -> dict:
         """
         #### Description:
         Get a dictionary of all available tags from the PLC.
@@ -246,6 +252,7 @@ class InterfaceRsLinx:
         #### Args:
             plc_ip (str): IP address of the PLC.
             verbose (bool): Whether to print verbose output.
+            callback: Optional callback function to receive verbose messages.
         
         #### Returns:
             dict: Dictionary with tag names as keys and data types as values, else raises Exception on failure.
@@ -261,9 +268,13 @@ class InterfaceRsLinx:
             plc.IPAddress = plc_ip
             
             # Get the tag list.
-            if verbose: print(f"retrieving tag list from plc at ip '{plc_ip}'...", end='')
+            msg = f"retrieving tag list from plc at ip '{plc_ip}'..."
+            if verbose: print(msg, end='')
+            if callback: callback(msg)
             tags = plc.GetTagList()
-            if verbose: print("done.")
+            msg_done = "done."
+            if verbose: print(msg_done)
+            if callback: callback(msg_done)
 
             # Create a dictionary to hold tag info.
             tag_info = {}
@@ -281,7 +292,9 @@ class InterfaceRsLinx:
                         if any(tag.DataType == value[1] for value in plc.CIPTypes.values()):
 
                             # Add the tag name and data type to the dictionary.
-                            if verbose: print(f"processing tag: '{tag.TagName}'")
+                            msg = f"processing tag: '{tag.TagName}'"
+                            if verbose: print(msg)
+                            if callback: callback(msg)
                             tag_info[tag.TagName] = {"ip_address": plc_ip, 
                                                     "data_type": tag.DataType,
                                                     "value": None,
@@ -295,7 +308,7 @@ class InterfaceRsLinx:
                                 if tag.DataType == udt_name:
                                     
                                     # Recursively process UDT fields (handles nested UDTs).
-                                    InterfaceRsLinx._process_udt_fields(tag.TagName, udt, plc_ip, plc, tag_info, verbose)
+                                    InterfaceRsLinx._process_udt_fields(tag.TagName, udt, plc_ip, plc, tag_info, verbose, callback)
                                     break
                 
                 # Return the tag info dictionary.
@@ -308,7 +321,7 @@ class InterfaceRsLinx:
                 raise Exception(tags.Status)
 
     @staticmethod
-    def get_all_available_tags(plc_ip: str, verbose: bool = False) -> dict:
+    def get_all_available_tags(plc_ip: str, verbose: bool = False, callback=None) -> dict:
         """
         #### Description:
         Public method to get all available tags (and their values) from the PLC.
@@ -316,13 +329,14 @@ class InterfaceRsLinx:
         #### Args:
             plc_ip (str): IP address of the PLC.
             verbose (bool): Whether to print verbose output.
+            callback: Optional callback function to receive verbose messages.
         
         #### Returns:
             dict: Dictionary with tag names as keys and data types as values, else raises Exception on failure.
         """
-        data = InterfaceRsLinx._get_all_available_tags(plc_ip, verbose=verbose)
+        data = InterfaceRsLinx._get_all_available_tags(plc_ip, verbose=verbose, callback=callback)
         list_of_tags = list(data.keys())
-        read_data = InterfaceRsLinx.read_tags(plc_ip, list_of_tags, verbose=verbose)
+        read_data = InterfaceRsLinx.read_tags(plc_ip, list_of_tags, verbose=verbose, callback=callback)
         for tag in data.keys():
             if tag in read_data:
                 data[tag]["value"] = read_data[tag]
