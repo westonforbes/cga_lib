@@ -125,7 +125,6 @@ class InterfaceRsLinx:
                         future = executor.submit(plc.Read, tag)
                         try:
                             result = future.result(timeout=2)
-                            print(result)
                         except concurrent.futures.TimeoutError:
                             raise TimeoutError(f"Timeout reading tag '{tag}' after 2 seconds"); return
 
@@ -235,11 +234,34 @@ class InterfaceRsLinx:
                     # If the tag has a data type (the GetTagList returns programs with no data type)...
                     if tag.DataType != "":
                         
-                        # Add the tag name and data type to the dictionary.
-                        tag_info[tag.TagName] = {"data_type": tag.DataType, 
-                                                 "current_value": None,
-                                                 "timestamp_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"),
-                                                 "timestamp_local": datetime.now().astimezone().strftime("%Y-%m-%dT%H:%M:%S")}
+                        # Detect if the tag is a standard datatype (not a UDT).
+                        if any(tag.DataType == value[1] for value in plc.CIPTypes.values()):
+
+                            # Add the tag name and data type to the dictionary.
+                            tag_info[tag.TagName] = {"ip_address": plc_ip, 
+                                                    "data_type": tag.DataType,
+                                                    "value": None,
+                                                    "timestamp_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"),
+                                                    "timestamp_local": datetime.now().astimezone().strftime("%Y-%m-%dT%H:%M:%S")}
+                        
+                        # If the tag is a UDT...
+                        else:
+
+                            for udt_name, udt in plc.UDTByName.items():
+                                if tag.DataType == udt_name:
+                                    
+                                    # Create a dictionary to hold UDT fields.
+                                    udt_fields = {}
+
+                                    # For each field in the UDT (except the first one which is the UDT itself)...
+                                    for field in udt.Fields[1:]:
+                                        tag_info[f"{tag.TagName}.{field.TagName}"] = {"ip_address": plc_ip, 
+                                                            "data_type": tag.DataType,
+                                                            "udt_fields": udt_fields,
+                                                            "value": None,
+                                                            "timestamp_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"),
+                                                            "timestamp_local": datetime.now().astimezone().strftime("%Y-%m-%dT%H:%M:%S")}
+
                 
                 # Return the tag info dictionary.
                 return tag_info
@@ -249,3 +271,15 @@ class InterfaceRsLinx:
 
                 # Raise an exception.
                 raise Exception(tags.Status)
+
+
+if __name__ == "__main__":
+    data = InterfaceRsLinx.get_all_available_tags("191.191.191.9")
+    list_of_tags = list(data.keys())
+    read_data = InterfaceRsLinx.read_tags("191.191.191.9", list_of_tags)
+    for tag in data.keys():
+        if tag in read_data:
+            data[tag]["value"] = read_data[tag]
+    
+    import json
+    print(json.dumps(data, indent=4))
