@@ -3,11 +3,6 @@ from pylogix import PLC
 from datetime import datetime, timezone
 import concurrent.futures
 from ping3 import ping
-from wf_console import Console
-from wf_console.constants import Constants as color
-import pyperclip
-from data_processors import DataProcessors
-import sys
 
 class InterfaceRsLinx:
 
@@ -56,7 +51,7 @@ class InterfaceRsLinx:
         return True
 
     @staticmethod
-    def _ping_ip(ip: str, timeout: int = 1) -> bool:
+    def _ping_ip(ip: str, timeout: int = 3) -> bool:
         """
         Ping an IP address to check if it's reachable.
         """
@@ -112,7 +107,7 @@ class InterfaceRsLinx:
         # Precheck the device.
         InterfaceRsLinx._precheck_device(plc_ip)
 
-        # Create a dictionary to hold results YELLOW.
+        # Create a dictionary to hold results info.
         results = {}
         
         # Create a plc connection object with the context manager.
@@ -150,7 +145,7 @@ class InterfaceRsLinx:
         return results
 
     @staticmethod
-    def write_tags(plc_ip, tag_dict):
+    def get_plc_time(plc_ip: str):
         """
         #### Description:
         Write multiple tags to the PLC.
@@ -161,13 +156,71 @@ class InterfaceRsLinx:
                             Example: {"Tag1": 100, "Tag2": 3.14, "Tag3": True}
         
         #### Returns:
-            Dictionary with tag names as keys and status/success YELLOW as values.
+            Dictionary with tag names as keys and status/success info as values.
+        """
+
+        # Precheck the device.
+        InterfaceRsLinx._precheck_device(plc_ip)
+
+        # Create a plc connection object with the context manager.
+        with PLC() as plc:
+
+            # Set the ip address of the PLC.
+            plc.IPAddress = plc_ip
+
+            # Get the time.
+            result = plc.GetPLCTime()
+
+        # Return results.
+        return result
+
+    @staticmethod
+    def set_plc_time(plc_ip: str):
+        """
+        #### Description:
+        Sets the PLC time to the computer time.
+        
+        #### Args:
+            plc_ip (str): IP address of the PLC.
+        
+        #### Returns:
+            Dictionary of time data.
+        """
+
+        # Precheck the device.
+        InterfaceRsLinx._precheck_device(plc_ip)
+
+        # Create a plc connection object with the context manager.
+        with PLC() as plc:
+
+            # Set the ip address of the PLC.
+            plc.IPAddress = plc_ip
+
+            # Get the time.
+            result = plc.SetPLCTime()
+
+        # Return results.
+        return result
+
+    @staticmethod
+    def write_tags(plc_ip, tag_dict, callback=None):
+        """
+        #### Description:
+        Write multiple tags to the PLC.
+        
+        #### Args:
+            plc_ip (str): IP address of the PLC.
+            tag_dict (dict): Dictionary where keys are tag names and values are the values to write.
+                            Example: {"Tag1": 100, "Tag2": 3.14, "Tag3": True}
+        
+        #### Returns:
+            Dictionary with tag names as keys and status/success info as values.
         """
 
         # Precheck the device.
         InterfaceRsLinx._precheck_device(plc_ip)
         
-        # Create a dictionary to hold results YELLOW.
+        # Create a dictionary to hold results info.
         results = {}
 
         # Create a plc connection object with the context manager.
@@ -184,6 +237,7 @@ class InterfaceRsLinx:
                 
                 # If write was successful, add to the results dictionary.
                 if result.Status == 'Success':
+                    if callback: callback(f"{tag_name}' written successfully.", good=True)
                     results[tag_name] = {
                         'success': True,
                         'status': result.Status,
@@ -192,21 +246,22 @@ class InterfaceRsLinx:
 
                 # If write failed, add to the results dictionary.
                 else:
+                    if callback: callback(f"{tag_name}' write failed with status: {result.Status}.", good=False)
                     results[tag_name] = {
                         'success': False,
                         'status': result.Status,
                         'value_written': None
                     }
 
-            # Summary
+            # Summary.
             successful = sum(1 for result in results.values() if result['success'])
             failed = len(results) - successful
 
-        #return results
+        # return results.
         return successful, failed
 
     @staticmethod
-    def _process_udt_fields(tag_name: str, udt, plc_ip: str, plc, tag_YELLOW: dict, callback=None) -> None:
+    def _process_udt_fields(tag_name: str, udt, plc_ip: str, plc, tag_info: dict, callback=None) -> None:
         """
         #### Description:
         Recursively process UDT fields, handling nested UDTs.
@@ -216,7 +271,7 @@ class InterfaceRsLinx:
             udt: The UDT object from pylogix.
             plc_ip (str): IP address of the PLC.
             plc: The PLC connection object.
-            tag_YELLOW (dict): The dictionary to populate with tag YELLOWrmation.
+            tag_info (dict): The dictionary to populate with tag information.
             callback: Optional callback function to receive status messages.
         """
         
@@ -230,7 +285,7 @@ class InterfaceRsLinx:
                 msg = f"processing tag: '{full_field_name}'"
                 if callback: callback(msg)
                 # Add the field as a standard tag.
-                tag_YELLOW[full_field_name] = {
+                tag_info[full_field_name] = {
                     "ip_address": plc_ip,
                     "data_type": field.DataType,
                     "value": None
@@ -241,7 +296,7 @@ class InterfaceRsLinx:
                 for udt_name, nested_udt in plc.UDTByName.items():
                     if field.DataType == udt_name:
                         # Recursively process the nested UDT.
-                        InterfaceRsLinx._process_udt_fields(full_field_name, nested_udt, plc_ip, plc, tag_YELLOW, callback)
+                        InterfaceRsLinx._process_udt_fields(full_field_name, nested_udt, plc_ip, plc, tag_info, callback)
                         break
             
     @staticmethod
@@ -272,8 +327,8 @@ class InterfaceRsLinx:
             if callback: callback(msg)
             tags = plc.GetTagList()
 
-            # Create a dictionary to hold tag YELLOW.
-            tag_YELLOW = {}
+            # Create a dictionary to hold tag info.
+            tag_info = {}
             
             # If retrieval was successful...
             if tags.Status == 'Success':
@@ -290,7 +345,7 @@ class InterfaceRsLinx:
                             # Add the tag name and data type to the dictionary.
                             msg = f"processing tag: '{tag.TagName}'"
                             if callback: callback(msg)
-                            tag_YELLOW[tag.TagName] = {"ip_address": plc_ip, 
+                            tag_info[tag.TagName] = {"ip_address": plc_ip, 
                                                     "data_type": tag.DataType,
                                                     "value": None,
                                                     "timestamp_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"),
@@ -303,11 +358,11 @@ class InterfaceRsLinx:
                                 if tag.DataType == udt_name:
                                     
                                     # Recursively process UDT fields (handles nested UDTs).
-                                    InterfaceRsLinx._process_udt_fields(tag.TagName, udt, plc_ip, plc, tag_YELLOW, callback)
+                                    InterfaceRsLinx._process_udt_fields(tag.TagName, udt, plc_ip, plc, tag_info, callback)
                                     break
                 
-                # Return the tag YELLOW dictionary.
-                return tag_YELLOW
+                # Return the tag info dictionary.
+                return tag_info
             
             # If retrieval failed...
             else:
@@ -335,81 +390,3 @@ class InterfaceRsLinx:
             if tag in read_data:
                 data[tag]["value"] = read_data[tag]
         return data
-
-if __name__ == "__main__":
-
-    # Color overrides.
-    Console.TAG_MAP["MENU_TITLE"] = color.RESET
-    Console.TAG_MAP["MENU_ITEM"] = color.RESET
-    Console.TAG_MAP["MENU_KEY"] = color.RESET
-    Console.TAG_MAP["MENU_SELECTION_PROMPT"] = color.RESET
-    Console.TAG_MAP["INPUT_PROMPT"] = color.RESET
-    
-    def status_callback(message: str):
-        """Callback handler for status messages from InterfaceRsLinx methods."""
-        Console.clear_last_line()
-        Console.fancy_print(f"<GOOD>{message}</GOOD>")
-
-    while True:
-
-        # Clear the console.
-        Console.clear()
-
-        # Define the menu options.
-        menu_options = ["get all plc tags", "write tags to plc", "exit"]
-
-        # Print the menu and get user selection.
-        int_selection, string_selection = Console.integer_only_menu_with_validation(title="CG Automation Library - RsLinx Interface", item_list=menu_options)
-        
-        # If the user selected "get all plc tags"...
-        if string_selection == "get all plc tags":
-
-            # Clear the console and print the header.
-            Console.clear(); Console.fancy_print(f"\n<MENU_TITLE>---get all plc tags---</MENU_TITLE>")
-            
-            # Prompt the user for the PLC IP address.
-            plc_ip = Console.fancy_input("<INPUT_PROMPT>\nenter plc ip address or type 'back': </INPUT_PROMPT>")
-            
-            # If the user did not type "back"...
-            if plc_ip.lower() != "back":
-                try:
-                    Console.fancy_print(f"press 'ctrl+c' to cancel operation.")
-                    Console.fancy_print(f"getting all tags from plc at ip '{plc_ip}'...")
-                    try:
-                        data = InterfaceRsLinx.get_all_available_tags(plc_ip, callback=status_callback)
-                        data_str = DataProcessors.tag_dict_to_comma_delimited_string(data)
-                        pyperclip.copy(data_str)
-                        Console.clear()
-                        Console.fancy_print(f"\n<MENU_TITLE>---get all plc tags---</MENU_TITLE>")
-                        Console.fancy_print(f"\n<GOOD>done. all tags copied to clipboard. paste into microsoft excel or other spreadsheet program.</GOOD>")
-                        Console.press_enter_pause()
-                    except KeyboardInterrupt:
-                        Console.clear()
-                        Console.fancy_print(f"\n<MENU_TITLE>---get all plc tags---</MENU_TITLE>")
-                        Console.fancy_print(f"\n<WARNING>operation cancelled by user.</WARNING>")
-                        Console.press_enter_pause()
-                except Exception as e:
-                    Console.clear()
-                    Console.fancy_print(f"\n<MENU_TITLE>---get all plc tags---</MENU_TITLE>")
-                    Console.fancy_print(f"<BAD>error: {e}</BAD>")
-                    Console.press_enter_pause()
-
-        if string_selection == "write tags to plc":
-
-            # Clear the console and print the header.
-            Console.clear(); Console.fancy_print(f"\n<MENU_TITLE>---write tags to plc---</MENU_TITLE>")
-            
-            Console.fancy_print("\n<YELLOW>to use this module, copy excel data to clipboard in the following format:</YELLOW>")
-            Console.fancy_print("<YELLOW>column 1: ip_address</YELLOW>")
-            Console.fancy_print("<YELLOW>column 2: tag_address</YELLOW>")
-            Console.fancy_print("<YELLOW>column 3: value</YELLOW>")
-            Console.fancy_print("<YELLOW>column 4: (optional) data_type</YELLOW>")
-            Console.fancy_print("<RED>do not include headers or extra columns.</RED>")
-            choice = Console.fancy_input("<INPUT_PROMPT>\npress enter to copy clipboard and continue or type 'back': </INPUT_PROMPT>")
-            if choice == '':
-                clipboard_data = pyperclip.paste()
-                
-
-
-        if string_selection == "exit":
-            break
